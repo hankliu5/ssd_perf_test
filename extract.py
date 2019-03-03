@@ -30,4 +30,5 @@ with open(sys.argv[1], 'r') as f:
     time_arr = np.asarray(total_arr, dtype=np.float32) * TIME_UNIT
     result_arr = np.ones(time_arr.size) * FILE_SIZE * thread_num
     result_arr = result_arr / time_arr
+    print('min: {}, median: {}, max: {}, std: {}'.format(np.min(result_arr), np.median(result_arr), np.max(result_arr), np.std(result_arr)))
     np.save(sys.argv[2], result_arr)
