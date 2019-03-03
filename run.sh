@@ -1,11 +1,19 @@
 #!/bin/bash
-THREAD_NUM=$1
-PATH_TO_FILE=$2
+PATH_TO_READ=$1
 
 make
-for i in {1..10}
+for thread_num in {1..8}
 do
-        free && sync && echo 3 > /proc/sys/vm/drop_caches && free
-        ./speed_test_multi $THREAD_NUM $PATH_TO_FILE
+        touch log.txt
+        echo $thread_num >> log.txt
+        for i in {1..512}
+        do
+                free &>/dev/null && sync && echo 3 > /proc/sys/vm/drop_caches && free &>/dev/null
+                ./speed_test_multi $thread_num $PATH_TO_READ >> log.txt
+        done
+        echo "finish num_thread $thread_num"
+        python3 extract.py log.txt $2_$thread_num
+        rm log.txt
 done
+mv *.npy out
 make clean
