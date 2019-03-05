@@ -1,11 +1,12 @@
 #!/bin/bash
 PATH_TO_READ=$1
 MODE=$2
+THREAD_NUM=$3
 make
 
 mount -o relatime -o remount $PATH_TO_READ
 # do relatime (default)
-for thread_num in {1..4}
+for thread_num in `seq 1 ${THREAD_NUM}`
 do
         touch log.txt
         echo ${thread_num} >> log.txt
@@ -24,7 +25,7 @@ mount -o noatime -o remount $PATH_TO_READ
 MODE+="_noatime"
 echo "working on noatime"
 
-for thread_num in {1..4}
+for thread_num in `seq 1 ${THREAD_NUM}`
 do
         touch log.txt
         echo ${thread_num} >> log.txt
