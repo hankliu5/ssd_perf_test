@@ -47,4 +47,7 @@ do
         rm log.txt
 done
 mv *.npy out
+cd libnvmed
+make clean
+cd ..
 make clean
