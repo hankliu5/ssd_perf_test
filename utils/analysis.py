@@ -3,8 +3,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-tick = 500
-p = Path('out')
+p = Path('../out')
 file_list = [str(x) for x in p.iterdir()]
 file_list.sort()
 table = {}
