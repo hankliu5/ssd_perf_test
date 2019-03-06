@@ -1,90 +1,114 @@
-import numpy as np
 from pathlib import Path
-import matplotlib.pyplot as plt
+import sys
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
-p = Path('../out')
-file_list = [str(x) for x in p.iterdir()]
-file_list.sort()
+p = Path(sys.argv[1])
+file_list = [(f, f.name) for f in p.rglob('*.npy')]
+file_list.sort(key=lambda tup: tup[1])
 table = {}
-# host / device
-# different scheduler
-# different number
-# for example: 'out/device_raid_kyber_1.npy'
-for filename in file_list:
-    arr = np.load(filename)
-    filename = filename.split('/')[-1].split('.')[0]
-    tmp_ls = filename.split('_')
-    platform = tmp_ls[0]
-    thread_num = tmp_ls[-1]
-    scheduler = '_'.join(tmp_ls[1:-1])
-    if platform not in table:
-        table[platform] = {}
-    if scheduler not in table[platform]:
-        table[platform][scheduler] = {}
-    table[platform][scheduler][thread_num] = arr
+best_among_threads = {}
+best_among_scheduler = {}
 
-for platform, platform_results in table.items():
-    for scheduler, scheduler_results in platform_results.items():
-        # first, compare the same platform/scheduler with different thread_num
+# for example: 1SSD_device_none_7.npy
+# <num of SSD>_<platform>_<scheduler>_<num of thread>.npy
+for path, filename in file_list:
+    arr = np.load(path)
+    tmp_ls = filename.split('.')[0].split('_')
+    num_of_SSD, platform, scheduler, num_of_thread = tmp_ls[0], tmp_ls[1], '_'.join(
+        tmp_ls[2:-1]), tmp_ls[-1]
+    if num_of_SSD not in table:
+        table[num_of_SSD] = {}
+        best_among_threads[num_of_SSD] = {}
+        best_among_scheduler[num_of_SSD] = {}
+    if platform not in table[num_of_SSD]:
+        table[num_of_SSD][platform] = {}
+        best_among_threads[num_of_SSD][platform] = {}
+        best_among_scheduler[num_of_SSD][platform] = {
+            'name': None, 'speed': 0, 'arr': None}
+    if scheduler not in table[num_of_SSD][platform]:
+        table[num_of_SSD][platform][scheduler] = {}
+        best_among_threads[num_of_SSD][platform][scheduler] = {
+            'num_of_thread': 0, 'speed': 0, 'arr': None}
+    table[num_of_SSD][platform][scheduler][num_of_thread] = arr
+
+# first, compare the same num_of_SSD/platform/scheduler with different thread_num
+for num_of_SSD, num_of_SSD_results in table.items():
+    print('='*20+'{}'.format(num_of_SSD)+'='*20)
+    for platform, platform_results in num_of_SSD_results.items():
+        for scheduler, scheduler_results in platform_results.items():
+            m = {}
+            print('type: {}_{}'.format(platform, scheduler))
+            print(
+                'thread_num\tmin (MB/s)\tavg (MB/s)\tmedian (MB/s)\tmax (MB/s)\tstd (MB/s)\t')
+            for thread_num, thread_num_results in scheduler_results.items():
+                avg_bandwidth = np.average(thread_num_results)
+                print('{}\t{}\t{}\t{}\t{}\t{}'.format(
+                    thread_num,
+                    np.min(thread_num_results),
+                    avg_bandwidth,
+                    np.median(thread_num_results),
+                    np.max(thread_num_results),
+                    np.std(thread_num_results)
+                ))
+                m[thread_num] = thread_num_results
+                if avg_bandwidth > best_among_scheduler[num_of_SSD][platform]['speed']:
+                    best_among_scheduler[num_of_SSD][platform]['name'] = '{}_{}'.format(
+                        scheduler, thread_num)
+                    best_among_scheduler[num_of_SSD][platform]['speed'] = avg_bandwidth
+                    best_among_scheduler[num_of_SSD][platform]['arr'] = thread_num_results
+                if avg_bandwidth > best_among_threads[num_of_SSD][platform][scheduler]['speed']:
+                    best_among_threads[num_of_SSD][platform][scheduler]['num_of_thread'] = thread_num
+                    best_among_threads[num_of_SSD][platform][scheduler]['speed'] = avg_bandwidth
+                    best_among_threads[num_of_SSD][platform][scheduler]['arr'] = thread_num_results
+
+            fig = plt.figure()
+            fig.suptitle('{}_{}'.format(platform, scheduler),
+                         fontsize=14, fontweight='bold')
+            ax = fig.add_subplot(111)
+            m = pd.DataFrame.from_dict(m)
+            ax = m.boxplot(ax=ax)
+            ax.set_xlabel('thread_num')
+            ax.set_ylabel('throughput (MB/s)')
+            plt.savefig(
+                sys.argv[2]+'/{}_{}_{}.png'.format(num_of_SSD, platform, scheduler))
+            plt.close(fig)
+
+
+# second, pick up the fastest num_of_threads for each scheduler and platform
+for num_of_SSD, num_of_SSD_results in best_among_threads.items():
+    for platform, platform_results in num_of_SSD_results.items():
         m = {}
-        print('type: {}_{}'.format(platform, scheduler))
-        print('thread_num\tmin (MB/s)\tavg (MB/s)\tmedian (MB/s)\tmax (MB/s)\tstd (MB/s)\t')
-        for thread_num, thread_num_results in scheduler_results.items():
-            max_bandwidth = np.max(thread_num_results)
-            print('{}\t{}\t{}\t{}\t{}\t{}'.format(
-                thread_num,
-                np.min(thread_num_results),
-                np.average(thread_num_results),
-                np.median(thread_num_results),
-                max_bandwidth,
-                np.std(thread_num_results)
-            ))
-            m[thread_num] = thread_num_results
-
+        for scheduler, scheduler_results in platform_results.items():
+            k = '{}_{}'.format(scheduler, scheduler_results['num_of_thread'])
+            m[k] = scheduler_results['arr']
         fig = plt.figure()
-        fig.suptitle('{}_{}'.format(platform, scheduler),
+        fig.suptitle('{} Comparison with different scheduler'.format(platform),
                      fontsize=14, fontweight='bold')
-        ax = fig.add_subplot(111)
-        m = pd.DataFrame.from_dict(m)
-        ax = m.boxplot(ax=ax)
-        ax.set_xlabel('thread_num')
-        ax.set_ylabel('throughput (MB/s)')
-        plt.savefig('plot/{}_{}.png'.format(platform, scheduler))
-
-
-# for RAID 0, 2 SSDs we know that when thread_num is 3, we can get the best throughput.
-# so we compare different scheduler here:
-for platform, platform_results in table.items():
-    m = {}
-    for scheduler, scheduler_results in platform_results.items():
-        m[scheduler] = scheduler_results['3']
-
-    fig = plt.figure()
-    fig.suptitle('{} Comparison with 3 Threads'.format(platform),
-                 fontsize=14, fontweight='bold')
-    ax = fig.add_subplot(111)
-    m = pd.DataFrame.from_dict(m)
-    ax = m.boxplot(ax=ax)
-    ax.set_xlabel('scheduler')
-    ax.set_ylabel('throughput (MB/s)')
-    plt.savefig('plot/{}_scheduler_compare.png'.format(platform))
-
-
-# Lastly, compare host/device throughput differences
-for scheduler in table['host'].keys():
-    if scheduler in table['device']:
-        m = {}
-        for platform in ('host', 'device'):
-            results = table[platform][scheduler]['3']
-            m[platform] = results
-
-        fig = plt.figure()
-        fig.suptitle('Platform Comparison in {} with 3 Threads'.format(scheduler),
-                        fontsize=14, fontweight='bold')
         ax = fig.add_subplot(111)
         m = pd.DataFrame.from_dict(m)
         ax = m.boxplot(ax=ax)
         ax.set_xlabel('scheduler')
         ax.set_ylabel('throughput (MB/s)')
-        plt.savefig('plot/platform_{}_compare.png'.format(scheduler))
+        plt.savefig(
+            sys.argv[2]+'/{}_{}_scheduler_compare.png'.format(num_of_SSD, platform))
+        plt.close(fig)
+
+
+# Third, compare host/device throughput differences
+# Pick up the maximum bandwidth among schedulers in each platform
+m = {}
+for num_of_SSD, num_of_SSD_results in best_among_scheduler.items():
+    for platform, platform_results in num_of_SSD_results.items():
+        k = '{}_{}_{}'.format(num_of_SSD, platform, platform_results['name'])
+        m[k] = platform_results['arr']
+fig = plt.figure()
+fig.suptitle('Platform Comparison', fontsize=14, fontweight='bold')
+ax = fig.add_subplot(111)
+m = pd.DataFrame.from_dict(m)
+ax = m.boxplot(ax=ax)
+ax.set_xlabel('scheduler')
+ax.set_ylabel('throughput (MB/s)')
+plt.savefig(sys.argv[2]+'/best_speed_compare.png')
+plt.close(fig)
