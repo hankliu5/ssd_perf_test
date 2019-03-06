@@ -46,7 +46,6 @@
 #include <pthread.h>
 #include <linux/fiemap.h>
 #include <linux/types.h>
-
 #include "fifo.h"
 #include "pyssdnvme.h"
 #define NVME_IOCTL_ID       _IO('N', 0x40)
@@ -61,7 +60,11 @@
 // The NVMe_Chunk must be smaller than the (2^(mdts))*512 Bytes of NVMe SSD. 
 #ifndef NVMED_CHUNK
 // NVMED_CHUNK should be 2^(NVMe SSD's mdts+3)
+#if __aarch64__
 #define NVMED_CHUNK 4096
+#else
+#define NVMED_CHUNK 1024
+#endif
 #define NVMED_WRITE_CHUNK NVMED_CHUNK
 #define DEVICE_MDTS NVMED_CHUNK
 #endif
@@ -242,7 +245,7 @@ struct nvme_thread_parameter
     int *number_of_remaining_requests;
     void *task;
 };
-
+#if __aarch64__
 inline void atomic_add(int i, volatile int *pw)
 {
 	unsigned long tmp;
@@ -272,16 +275,36 @@ inline void atomic_sub(int i, volatile int *pw)
 	: "r" (pw), "Ir" (i)
 	: "cc");
 }
-
+#endif
 
 inline void atomic_increment(volatile int *pw)
 {
+#if __aarch64__
     atomic_add(1, pw);
+#else
+    __asm (
+        "lock\n\t"
+        "incl %0":
+        "=m"(*pw): // output (%0)
+        "m"(*pw): // input (%1)
+        "cc" // clobbers
+        );
+#endif
 }
 
 inline void atomic_decrement(volatile int *pw)
 {
+#if __aarch64__
     atomic_sub(1, pw);
+#else
+    __asm (
+         "lock\n\t"
+         "decl %0":
+         "=m"(*pw): // output (%0)
+         "m"(*pw): // input (%1)
+         "cc" // clobbers
+         );
+#endif
 }
 
 inline int submit_request(struct fifo *queue, struct nvme_request *request, int devfd, size_t slba, size_t count, size_t size, void *host_memory_address)
