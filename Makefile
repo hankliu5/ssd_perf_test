@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wformat -Wunused-result -O2
+CFLAGS=-Wformat -Wunused-result -O3
 INCLUDES=
 LDFLAGS=
 LIBS=-pthread
