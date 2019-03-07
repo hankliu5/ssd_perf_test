@@ -4,6 +4,23 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+fig_size = (16, 12)
+
+
+def draw_plot(suptitle, df, xlabel, outfilename):
+    fig = plt.figure(figsize=fig_size)
+    fig.suptitle(suptitle, fontsize=28, fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax = df.boxplot(ax=ax)
+    ax.set_xlabel(xlabel, fontsize=20, fontweight='bold')
+    ax.set_ylabel('throughput (MB/s)', fontsize=20, fontweight='bold')
+    # plt.setp(ax.get_xticklabels(), rotation=30, horizontalalignment='right', fontsize=12)
+    plt.setp(ax.get_xticklabels(), rotation=15, fontsize=14)
+    plt.setp(ax.get_yticklabels(), fontsize=16)
+    plt.savefig(outfilename)
+    plt.close(fig)
+
+
 p = Path(sys.argv[1])
 file_list = [(f, f.name) for f in p.rglob('*.npy')]
 file_list.sort(key=lambda tup: tup[1])
@@ -63,17 +80,12 @@ for num_of_SSD, num_of_SSD_results in table.items():
                     best_among_threads[num_of_SSD][platform][scheduler]['speed'] = avg_bandwidth
                     best_among_threads[num_of_SSD][platform][scheduler]['arr'] = thread_num_results
 
-            fig = plt.figure()
-            fig.suptitle('{}_{}'.format(platform, scheduler),
-                         fontsize=14, fontweight='bold')
-            ax = fig.add_subplot(111)
             m = pd.DataFrame.from_dict(m)
-            ax = m.boxplot(ax=ax)
-            ax.set_xlabel('thread_num')
-            ax.set_ylabel('throughput (MB/s)')
-            plt.savefig(
-                sys.argv[2]+'/{}_{}_{}.png'.format(num_of_SSD, platform, scheduler))
-            plt.close(fig)
+            xlabel = 'thread_num'
+            suptitle = '{}_{}'.format(platform, scheduler)
+            outfilename = sys.argv[2] + \
+                '/{}_{}_{}.png'.format(num_of_SSD, platform, scheduler)
+            draw_plot(suptitle, m, xlabel, outfilename)
 
 
 # second, pick up the fastest num_of_threads for each scheduler and platform
@@ -83,17 +95,12 @@ for num_of_SSD, num_of_SSD_results in best_among_threads.items():
         for scheduler, scheduler_results in platform_results.items():
             k = '{}_{}'.format(scheduler, scheduler_results['num_of_thread'])
             m[k] = scheduler_results['arr']
-        fig = plt.figure()
-        fig.suptitle('{} Comparison with different scheduler'.format(platform),
-                     fontsize=14, fontweight='bold')
-        ax = fig.add_subplot(111)
         m = pd.DataFrame.from_dict(m)
-        ax = m.boxplot(ax=ax)
-        ax.set_xlabel('scheduler')
-        ax.set_ylabel('throughput (MB/s)')
-        plt.savefig(
-            sys.argv[2]+'/{}_{}_scheduler_compare.png'.format(num_of_SSD, platform))
-        plt.close(fig)
+        xlabel = 'scheduler'
+        suptitle = '{} Comparison with different scheduler'.format(platform)
+        outfilename = sys.argv[2] + \
+            '/{}_{}_scheduler_compare.png'.format(num_of_SSD, platform)
+        draw_plot(suptitle, m, xlabel, outfilename)
 
 
 # Third, compare host/device throughput differences
@@ -103,12 +110,10 @@ for num_of_SSD, num_of_SSD_results in best_among_scheduler.items():
     for platform, platform_results in num_of_SSD_results.items():
         k = '{}_{}_{}'.format(num_of_SSD, platform, platform_results['name'])
         m[k] = platform_results['arr']
-fig = plt.figure()
-fig.suptitle('Platform Comparison', fontsize=14, fontweight='bold')
-ax = fig.add_subplot(111)
+
 m = pd.DataFrame.from_dict(m)
-ax = m.boxplot(ax=ax)
-ax.set_xlabel('scheduler')
-ax.set_ylabel('throughput (MB/s)')
-plt.savefig(sys.argv[2]+'/best_speed_compare.png')
-plt.close(fig)
+xlabel = 'scheduler'
+suptitle = 'Platform Comparison'
+outfilename = sys.argv[2]+'/best_speed_compare.png'
+draw_plot(suptitle, m, xlabel, outfilename)
+fig = plt.figure(figsize=fig_size)
